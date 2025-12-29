@@ -1,0 +1,38 @@
+[
+  {
+    "id": "poi-1",
+    "name": "Historic Bridge",
+    "latitude": 59.3293,
+    "longitude": 18.0686,
+    "radius": 500,
+    "fact": "This bridge was built in 1935 and connects two historic districts. It's one of the oldest steel bridges in the region.",
+    "category": "landmark"
+  },
+  {
+    "id": "poi-2",
+    "name": "Old Town Square",
+    "latitude": 59.3345,
+    "longitude": 18.0632,
+    "radius": 300,
+    "fact": "The Old Town Square dates back to the 13th century. Many of the buildings here survived the great fire of 1624.",
+    "category": "historic"
+  },
+  {
+    "id": "poi-3",
+    "name": "Mountain View",
+    "latitude": 59.32,
+    "longitude": 18.07,
+    "radius": 200,
+    "fact": "From this viewpoint, you can see three different mountain ranges on a clear day. The highest peak visible is 1,200 meters tall.",
+    "category": "viewpoint"
+  },
+  {
+    "id": "poi-test-current",
+    "name": "Test Location",
+    "latitude": 59.3401,
+    "longitude": 18.1125,
+    "radius": 200,
+    "fact": "GPS test successful! You're at your test location. The travel guide app is working perfectly!",
+    "category": "test"
+  }
+]
