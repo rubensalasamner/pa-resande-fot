@@ -6,7 +6,7 @@ import { LocationSimulator } from "@/services/LocationSimulator";
 import { NarrationService } from "@/services/NarrationService";
 import { ProximityEngine } from "@/services/ProximityEngine";
 import { useAppStore } from "@/store/useAppStore";
-import { Location as LocationType } from "@/types";
+import { Location as LocationType, PointOfInterest } from "@/types";
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -28,6 +28,10 @@ export default function DrivingScreen() {
 
   const [showRoutePlanning, setShowRoutePlanning] = useState(false);
   const allPOIs = useRef(contentProvider.getAllPOIs());
+  const [nextPOI, setNextPOI] = useState<{
+    poi: PointOfInterest;
+    distance: number;
+  } | null>(null);
 
   // Get API URL from ContentProvider (same as used for POIs)
   const API_URL =
@@ -105,6 +109,10 @@ export default function DrivingScreen() {
 
       setNearbyPOIs(triggerablePOIs);
 
+      // Find next POI for distance display
+      const nextPOIData = proximityEngine.getNextPOI(currentLocation, pois);
+      setNextPOI(nextPOIData);
+
       // Narrate the first triggerable POI
       if (triggerablePOIs.length > 0) {
         const poi = triggerablePOIs[0];
@@ -124,6 +132,13 @@ export default function DrivingScreen() {
         localPOIs
       );
       setNearbyPOIs(triggerablePOIs);
+
+      // Find next POI for distance display
+      const nextPOIData = proximityEngine.getNextPOI(
+        currentLocation,
+        localPOIs
+      );
+      setNextPOI(nextPOIData);
 
       if (triggerablePOIs.length > 0) {
         const poi = triggerablePOIs[0];
@@ -160,6 +175,20 @@ export default function DrivingScreen() {
                 Accuracy: {Math.round(currentLocation.accuracy)}m
               </Text>
             )}
+          </View>
+        )}
+
+        {nextPOI && isDriving && (
+          <View style={styles.nextPOICard}>
+            <Text style={styles.nextPOILabel}>Next POI:</Text>
+            <Text style={styles.nextPOIName}>{nextPOI.poi.name}</Text>
+            <Text style={styles.nextPOIDistance}>
+              {nextPOI.distance < 1000
+                ? `${Math.round(nextPOI.distance)} m ahead`
+                : `${(nextPOI.distance / 1000).toFixed(1)} km ahead`}
+              {" · "}
+              {Math.round(nextPOI.distance / 1000)} min
+            </Text>
           </View>
         )}
 
@@ -282,6 +311,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     marginTop: 8,
+  },
+  nextPOICard: {
+    backgroundColor: "#007AFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  nextPOILabel: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.9)",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  nextPOIName: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 6,
+  },
+  nextPOIDistance: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.95)",
+    fontWeight: "500",
   },
   poiSection: {
     marginTop: 20,

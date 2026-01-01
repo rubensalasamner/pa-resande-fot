@@ -7,7 +7,7 @@ export class ProximityEngine {
   /**
    * Calculate distance between two coordinates in meters (Haversine formula)
    */
-  private calculateDistance(
+  calculateDistance(
     lat1: number,
     lon1: number,
     lat2: number,
@@ -81,5 +81,46 @@ export class ProximityEngine {
   ): PointOfInterest[] {
     const nearby = this.findNearbyPOIs(location, allPOIs);
     return nearby.filter((poi) => this.shouldTriggerPOI(poi.id));
+  }
+
+  /**
+   * Find the next POI (closest untriggered POI)
+   * Returns the POI and its distance in meters
+   */
+  getNextPOI(
+    location: Location,
+    allPOIs: PointOfInterest[]
+  ): { poi: PointOfInterest; distance: number } | null {
+    const untriggeredPOIs = allPOIs.filter((poi) =>
+      this.shouldTriggerPOI(poi.id)
+    );
+
+    if (untriggeredPOIs.length === 0) {
+      return null;
+    }
+
+    // Find the closest POI
+    let closestPOI: PointOfInterest | null = null;
+    let closestDistance = Infinity;
+
+    for (const poi of untriggeredPOIs) {
+      const distance = this.calculateDistance(
+        location.latitude,
+        location.longitude,
+        poi.latitude,
+        poi.longitude
+      );
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestPOI = poi;
+      }
+    }
+
+    if (!closestPOI) {
+      return null;
+    }
+
+    return { poi: closestPOI, distance: closestDistance };
   }
 }
