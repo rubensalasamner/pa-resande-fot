@@ -54,6 +54,15 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="map" color={color} />,
         }}
       />
+      {__DEV__ && (
+        <Tabs.Screen
+          name="simulator"
+          options={{
+            title: 'Simulator',
+            tabBarIcon: ({ color }) => <TabBarIcon name="play-circle" color={color} />,
+          }}
+        />
+      )}
     </Tabs>
   );
 }
