@@ -1,36 +1,77 @@
-import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager';
-import { Location as LocationType } from '@/types';
+import { Location as LocationType } from "@/types";
+import * as Location from "expo-location";
+import * as TaskManager from "expo-task-manager";
+import { LocationSimulator } from "./LocationSimulator";
 
-const LOCATION_TASK_NAME = 'background-location-task';
+const LOCATION_TASK_NAME = "background-location-task";
 
 export class LocationService {
   private locationSubscription: Location.LocationSubscription | null = null;
   private onLocationUpdate?: (location: LocationType) => void;
   private backgroundTaskStarted: boolean = false;
+  private simulator: LocationSimulator | null = null;
+  private simulationMode: boolean = false;
 
   async requestPermissions(): Promise<boolean> {
-    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-    if (foregroundStatus !== 'granted') {
+    const { status: foregroundStatus } =
+      await Location.requestForegroundPermissionsAsync();
+    if (foregroundStatus !== "granted") {
       return false;
     }
 
     // Try to request background permission, but don't fail if not available (Expo Go limitation)
     try {
-      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus !== 'granted') {
-        console.warn('Background location permission not granted - foreground tracking will still work');
+      const { status: backgroundStatus } =
+        await Location.requestBackgroundPermissionsAsync();
+      if (backgroundStatus !== "granted") {
+        console.warn(
+          "Background location permission not granted - foreground tracking will still work"
+        );
       }
     } catch (error) {
       // Background location not available in Expo Go - this is expected
-      console.warn('Background location not available (Expo Go limitation):', error);
+      console.warn(
+        "Background location not available (Expo Go limitation):",
+        error
+      );
     }
 
     return true;
   }
 
+  /**
+   * Enable simulation mode
+   */
+  enableSimulation(simulator: LocationSimulator) {
+    this.simulator = simulator;
+    this.simulationMode = true;
+  }
+
+  /**
+   * Disable simulation mode
+   */
+  disableSimulation() {
+    this.simulationMode = false;
+    this.simulator = null;
+  }
+
+  /**
+   * Manually trigger location update (for simulation)
+   */
+  triggerLocationUpdate(location: LocationType) {
+    if (this.onLocationUpdate) {
+      this.onLocationUpdate(location);
+    }
+  }
+
   async startLocationTracking(onUpdate: (location: LocationType) => void) {
     this.onLocationUpdate = onUpdate;
+
+    // If in simulation mode, don't start real GPS
+    if (this.simulationMode && this.simulator) {
+      // Simulation will be controlled externally
+      return;
+    }
 
     // Start foreground location tracking (this works in Expo Go)
     this.locationSubscription = await Location.watchPositionAsync(
@@ -60,8 +101,8 @@ export class LocationService {
           timeInterval: 10000, // 10 seconds in background
           distanceInterval: 100, // 100 meters in background
           foregroundService: {
-            notificationTitle: 'Travel Guide Active',
-            notificationBody: 'Tracking your journey',
+            notificationTitle: "Travel Guide Active",
+            notificationBody: "Tracking your journey",
           },
         });
         this.backgroundTaskStarted = true;
@@ -85,7 +126,9 @@ export class LocationService {
       try {
         const isTaskDefined = TaskManager.isTaskDefined(LOCATION_TASK_NAME);
         if (isTaskDefined) {
-          const isRegistered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+          const isRegistered = await Location.hasStartedLocationUpdatesAsync(
+            LOCATION_TASK_NAME
+          );
           if (isRegistered) {
             await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
           }
@@ -101,14 +144,13 @@ export class LocationService {
 // Define background task handler
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
-    console.error('Location task error:', error);
+    console.error("Location task error:", error);
     return;
   }
   if (data) {
     const { locations } = data as any;
     // Handle background location updates
     // You can emit events or update store here
-    console.log('Background location update:', locations);
+    console.log("Background location update:", locations);
   }
 });
-

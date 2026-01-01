@@ -1,4 +1,4 @@
-import { PointOfInterest, Location } from '@/types';
+import { Location, PointOfInterest } from "@/types";
 
 export class ProximityEngine {
   private lastTriggeredPOIs: Map<string, number> = new Map();
@@ -44,11 +44,6 @@ export class ProximityEngine {
         poi.longitude
       );
 
-      // Debug log for test POI
-      if (poi.id === 'poi-test-current') {
-        console.log(`Distance to test POI: ${distance.toFixed(2)}m (radius: ${poi.radius}m)`);
-      }
-
       if (distance <= poi.radius) {
         nearby.push(poi);
       }
@@ -85,7 +80,6 @@ export class ProximityEngine {
     allPOIs: PointOfInterest[]
   ): PointOfInterest[] {
     const nearby = this.findNearbyPOIs(location, allPOIs);
-    return nearby.filter(poi => this.shouldTriggerPOI(poi.id));
+    return nearby.filter((poi) => this.shouldTriggerPOI(poi.id));
   }
 }
-

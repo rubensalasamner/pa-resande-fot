@@ -1,12 +1,17 @@
+import { LocationSimulatorControls } from "@/components/LocationSimulatorControls";
+import { RoutePlanningModal } from "@/components/RoutePlanningModal";
 import { ContentProvider } from "@/services/ContentProvider";
 import { LocationService } from "@/services/LocationService";
+import { LocationSimulator } from "@/services/LocationSimulator";
 import { NarrationService } from "@/services/NarrationService";
 import { ProximityEngine } from "@/services/ProximityEngine";
 import { useAppStore } from "@/store/useAppStore";
-import React, { useEffect, useRef } from "react";
+import { Location as LocationType } from "@/types";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const locationService = new LocationService();
+const locationSimulator = new LocationSimulator();
 const proximityEngine = new ProximityEngine();
 const narrationService = new NarrationService();
 const contentProvider = new ContentProvider();
@@ -21,7 +26,12 @@ export default function DrivingScreen() {
     setNearbyPOIs,
   } = useAppStore();
 
+  const [showRoutePlanning, setShowRoutePlanning] = useState(false);
   const allPOIs = useRef(contentProvider.getAllPOIs());
+
+  // Get API URL from ContentProvider (same as used for POIs)
+  const API_URL =
+    process.env.EXPO_PUBLIC_API_URL || "https://your-vercel-api.vercel.app";
 
   useEffect(() => {
     if (isDriving) {
@@ -64,38 +74,62 @@ export default function DrivingScreen() {
     setNearbyPOIs([]);
   };
 
-  const checkForNearbyPOIs = () => {
+  const checkForNearbyPOIs = async () => {
     if (!currentLocation) return;
 
-    // Reload POIs in case JSON was updated
-    const pois = contentProvider.getAllPOIs();
-    allPOIs.current = pois;
+    try {
+      // Fetch POIs from API based on current location
+      const pois = await contentProvider.fetchPOIsFromAPI(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        5000 // 5km radius
+      );
 
-    console.log(
-      "Current location:",
-      currentLocation.latitude,
-      currentLocation.longitude
-    );
-    console.log("Total POIs loaded:", pois.length);
+      allPOIs.current = pois;
+      console.log(
+        "Current location:",
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
+      console.log("Total POIs loaded from API:", pois.length);
 
-    const triggerablePOIs = proximityEngine.getTriggerablePOIs(
-      currentLocation,
-      pois
-    );
+      const triggerablePOIs = proximityEngine.getTriggerablePOIs(
+        currentLocation,
+        pois
+      );
 
-    console.log("Triggerable POIs found:", triggerablePOIs.length);
-    if (triggerablePOIs.length > 0) {
-      console.log("POI details:", triggerablePOIs[0]);
-    }
+      console.log("Triggerable POIs found:", triggerablePOIs.length);
+      if (triggerablePOIs.length > 0) {
+        console.log("POI details:", triggerablePOIs[0]);
+      }
 
-    setNearbyPOIs(triggerablePOIs);
+      setNearbyPOIs(triggerablePOIs);
 
-    // Narrate the first triggerable POI
-    if (triggerablePOIs.length > 0) {
-      const poi = triggerablePOIs[0];
-      proximityEngine.markTriggered(poi.id);
-      console.log("Speaking:", poi.fact);
-      narrationService.speak(poi.fact);
+      // Narrate the first triggerable POI
+      if (triggerablePOIs.length > 0) {
+        const poi = triggerablePOIs[0];
+        proximityEngine.markTriggered(poi.id);
+        console.log("Speaking:", poi.fact);
+        narrationService.speak(poi.fact);
+      }
+    } catch (error) {
+      console.error("Error fetching POIs:", error);
+      // Fallback to local POIs
+      const localPOIs = contentProvider.getAllPOIs();
+      allPOIs.current = localPOIs;
+      console.log("Using local POIs as fallback:", localPOIs.length);
+
+      const triggerablePOIs = proximityEngine.getTriggerablePOIs(
+        currentLocation,
+        localPOIs
+      );
+      setNearbyPOIs(triggerablePOIs);
+
+      if (triggerablePOIs.length > 0) {
+        const poi = triggerablePOIs[0];
+        proximityEngine.markTriggered(poi.id);
+        narrationService.speak(poi.fact);
+      }
     }
   };
 
@@ -150,13 +184,6 @@ export default function DrivingScreen() {
             <Text style={styles.debugText}>
               Nearby POIs: {nearbyPOIs.length}
             </Text>
-            {allPOIs.current.length > 0 && (
-              <Text style={styles.debugText}>
-                Test POI:{" "}
-                {allPOIs.current.find((p) => p.id === "poi-test-current")
-                  ?.name || "Not found"}
-              </Text>
-            )}
           </View>
         )}
 
@@ -165,14 +192,53 @@ export default function DrivingScreen() {
         )}
       </View>
 
-      <TouchableOpacity
-        style={[styles.button, isDriving && styles.buttonStop]}
-        onPress={toggleDriving}
-      >
-        <Text style={styles.buttonText}>
-          {isDriving ? "Stop Driving" : "Start Driving"}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.buttonRow}>
+        {!isDriving && (
+          <TouchableOpacity
+            style={styles.prepareButton}
+            onPress={() => setShowRoutePlanning(true)}
+          >
+            <Text style={styles.prepareButtonText}>Förbered Rutt</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={[styles.button, isDriving && styles.buttonStop]}
+          onPress={toggleDriving}
+        >
+          <Text style={styles.buttonText}>
+            {isDriving ? "Stop Driving" : "Start Driving"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <RoutePlanningModal
+        visible={showRoutePlanning}
+        onClose={() => setShowRoutePlanning(false)}
+        onRoutePrepared={() => {
+          Alert.alert("Rutt förberedd", "Du kan nu starta körning!");
+        }}
+        apiUrl={API_URL}
+      />
+
+      {__DEV__ && (
+        <LocationSimulatorControls
+          locationService={locationService}
+          simulator={locationSimulator}
+          onLocationSet={(lat, lon) => {
+            const location: LocationType = {
+              latitude: lat,
+              longitude: lon,
+              accuracy: 10,
+              timestamp: Date.now(),
+            };
+            setCurrentLocation(location);
+            // If driving, check for POIs immediately
+            if (isDriving) {
+              checkForNearbyPOIs();
+            }
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -268,12 +334,29 @@ const styles = StyleSheet.create({
     color: "#856404",
     marginBottom: 4,
   },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
+  },
+  prepareButton: {
+    backgroundColor: "#007AFF",
+    padding: 18,
+    borderRadius: 10,
+    alignItems: "center",
+    flex: 1,
+  },
+  prepareButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   button: {
     backgroundColor: "#4CAF50",
     padding: 18,
     borderRadius: 10,
     alignItems: "center",
-    marginBottom: 20,
+    flex: 1,
   },
   buttonStop: {
     backgroundColor: "#f44336",

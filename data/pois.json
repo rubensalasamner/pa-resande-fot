@@ -25,14 +25,5 @@
     "radius": 200,
     "fact": "From this viewpoint, you can see three different mountain ranges on a clear day. The highest peak visible is 1,200 meters tall.",
     "category": "viewpoint"
-  },
-  {
-    "id": "poi-test-current",
-    "name": "Test Location",
-    "latitude": 59.3401,
-    "longitude": 18.1125,
-    "radius": 200,
-    "fact": "GPS test successful! You're at your test location. The travel guide app is working perfectly!",
-    "category": "test"
   }
 ]
