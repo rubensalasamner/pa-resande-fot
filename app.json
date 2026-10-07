@@ -45,6 +45,13 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow pa-resande-fot to use your location in the background to provide audio guides while driving."
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false
+        }
       ]
     ],
     "experiments": {

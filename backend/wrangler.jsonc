@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pa-resande-fot-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "TTS_VOICE": "sv-SE-Chirp3-HD-Algenib",
+    "DEFAULT_POI_RADIUS_M": "500",
+    "INLINE_TTS_MAX": "5"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pa-resande-fot",
+      "database_id": "local-dev-placeholder",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AUDIO",
+      "bucket_name": "pa-resande-fot-audio"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "TTS_QUEUE",
+        "queue": "tts-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "tts-jobs",
+        "max_batch_size": 5,
+        "max_retries": 3
+      }
+    ]
+  }
+}

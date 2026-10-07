@@ -6,6 +6,8 @@ export interface PointOfInterest {
   radius: number; // in meters - how close you need to be
   fact: string; // The text to narrate
   category?: string;
+  audioUrl?: string;
+  localAudioPath?: string;
 }
 
 export interface Location {
@@ -15,11 +17,16 @@ export interface Location {
   timestamp: number;
 }
 
+export interface ActiveRoute {
+  routeId: string;
+  origin: string;
+  destination: string;
+  pois: PointOfInterest[];
+}
+
 export interface AppState {
   isDriving: boolean;
   currentLocation: Location | null;
   nearbyPOIs: PointOfInterest[];
-  lastNarratedPOI: string | null;
-  narrationQueue: string[];
+  activeRoute: ActiveRoute | null;
 }
-

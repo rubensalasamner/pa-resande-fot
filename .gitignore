@@ -33,6 +33,12 @@ yarn-error.*
 # local env files
 .env*.local
 .env
+backend/.dev.vars
+
+# Cloudflare / Wrangler
+backend/.wrangler/
+backend/node_modules/
+backend/voice-samples/
 
 # typescript
 *.tsbuildinfo

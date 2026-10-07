@@ -1,31 +1,33 @@
+import { apiClient } from "@/services/ApiClient";
+import { routePackStore } from "@/services/RoutePackStore";
+import { useAppStore } from "@/store/useAppStore";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
-  Alert,
 } from "react-native";
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onRoutePrepared: () => void;
-  apiUrl: string;
 }
 
 export function RoutePlanningModal({
   visible,
   onClose,
   onRoutePrepared,
-  apiUrl,
 }: Props) {
+  const setActiveRoute = useAppStore((s) => s.setActiveRoute);
   const [origin, setOrigin] = useState("Stockholm, Sweden");
   const [destination, setDestination] = useState("Mora, Sweden");
-  const [intervalKm, setIntervalKm] = useState("5");
+  const [intervalKm, setIntervalKm] = useState("10");
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState("");
 
@@ -45,30 +47,34 @@ export function RoutePlanningModal({
     setProgress("Förbereder rutt...");
 
     try {
-      const baseUrl = apiUrl.replace(/\/$/, "");
-      const url = `${baseUrl}/api/prepare-route`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          origin: origin.trim(),
-          destination: destination.trim(),
-          intervalKm: interval,
-        }),
+      const data = await apiClient.prepareRoute({
+        origin: origin.trim(),
+        destination: destination.trim(),
+        intervalKm: interval,
       });
 
-      const data = await response.json();
+      setProgress(
+        `Rutt skapad (${data.articlesSaved} platser). Genererar ljud...`
+      );
 
-      if (!response.ok) {
-        throw new Error(data.message || data.error || "Ett fel uppstod");
-      }
+      const active = await routePackStore.waitAndDownload(
+        data.routeId,
+        (p) => {
+          if (p.phase === "waiting-audio") {
+            setProgress(
+              `Genererar ljud ${p.audioReady}/${p.audioTotal || "?"}`
+            );
+          } else if (p.phase === "downloading") {
+            setProgress(`Laddar ner ljud ${p.downloaded}/${p.audioTotal}`);
+          }
+        }
+      );
+
+      setActiveRoute(active);
 
       Alert.alert(
         "Klart!",
-        `Rutt förberedd!\n\n${data.message}\n\nArtiklar hämtade: ${data.articlesFetched}\nArtiklar sparade: ${data.articlesSaved}`,
+        `Rutt förberedd!\n\n${data.message}\n\nArtiklar hämtade: ${data.articlesFetched}\nArtiklar sparade: ${data.articlesSaved}\nLjudfiler: ${active.pois.filter((p) => p.localAudioPath).length}`,
         [
           {
             text: "OK",
@@ -102,7 +108,7 @@ export function RoutePlanningModal({
         <View style={styles.modalContent}>
           <Text style={styles.title}>Förbered Rutt</Text>
           <Text style={styles.subtitle}>
-            Ladda ner Wikipedia-artiklar längs rutten innan du kör
+            Hämta Wikipedia-platser och ljud längs rutten innan du kör
           </Text>
 
           <View style={styles.inputContainer}>
@@ -130,11 +136,11 @@ export function RoutePlanningModal({
           <View style={styles.inputContainer}>
             <Text style={styles.label}>
               Sampling-intervall (km):{" "}
-              <Text style={styles.hint}>(1-20, rekommenderat: 5)</Text>
+              <Text style={styles.hint}>(1-20, prova 10 på Free-tier)</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="5"
+              placeholder="10"
               value={intervalKm}
               onChangeText={setIntervalKm}
               keyboardType="numeric"
@@ -159,7 +165,11 @@ export function RoutePlanningModal({
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, styles.submitButton, isLoading && styles.buttonDisabled]}
+              style={[
+                styles.button,
+                styles.submitButton,
+                isLoading && styles.buttonDisabled,
+              ]}
               onPress={handlePrepareRoute}
               disabled={isLoading}
             >
@@ -240,6 +250,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 14,
     color: "#007AFF",
+    flex: 1,
   },
   buttonContainer: {
     flexDirection: "row",
@@ -280,4 +291,3 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-

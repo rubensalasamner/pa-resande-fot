@@ -1,5 +1,5 @@
-import { ContentProvider } from "@/services/ContentProvider";
-import { NarrationService } from "@/services/NarrationService";
+import { apiClient } from "@/services/ApiClient";
+import { narrator } from "@/services/narration";
 import { ProximityEngine } from "@/services/ProximityEngine";
 import { Location as LocationType, PointOfInterest } from "@/types";
 import React, { useEffect, useRef, useState } from "react";
@@ -12,10 +12,6 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-
-interface Props {
-  apiUrl: string;
-}
 
 // Sweden bounding box for initial region
 const SWEDEN_REGION = {
@@ -31,12 +27,9 @@ const DEFAULT_CAR_POSITION = {
   longitude: 18.0686,
 };
 
-// Create singleton instances (same as in real driving screen)
 const proximityEngine = new ProximityEngine();
-const narrationService = new NarrationService();
-const contentProvider = new ContentProvider();
 
-export function POISimulationMap({ apiUrl }: Props) {
+export function POISimulationMap() {
   const [pois, setPois] = useState<PointOfInterest[]>([]);
   const [loading, setLoading] = useState(true);
   const [carPosition, setCarPosition] = useState(DEFAULT_CAR_POSITION);
@@ -60,53 +53,8 @@ export function POISimulationMap({ apiUrl }: Props) {
   const fetchAllPOIs = async () => {
     try {
       setLoading(true);
-      const baseUrl = apiUrl.replace(/\/$/, "");
-      const url = `${baseUrl}/api/all-pois`;
-      console.log("Fetching POIs from:", url);
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API error response:", response.status, errorText);
-        throw new Error(`API error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log("API response:", data);
-      console.log("POIs count:", data.pois?.length || 0);
-
-      if (data.success && data.pois && Array.isArray(data.pois)) {
-        const validPOIs: PointOfInterest[] = data.pois
-          .filter((poi: any) => {
-            const isValid =
-              poi.latitude != null &&
-              poi.longitude != null &&
-              !isNaN(Number(poi.latitude)) &&
-              !isNaN(Number(poi.longitude));
-            if (!isValid) {
-              console.warn("Invalid POI coordinates:", poi);
-            }
-            return isValid;
-          })
-          .map((poi: any) => ({
-            id: poi.id,
-            name: poi.name || poi.title,
-            latitude: Number(poi.latitude),
-            longitude: Number(poi.longitude),
-            radius: poi.radius || 200,
-            fact: poi.fact || `${poi.name} is an interesting location.`,
-            category: poi.category || "wikipedia",
-          }));
-        console.log("Valid POIs count:", validPOIs.length);
-        setPois(validPOIs);
-      } else {
-        console.warn("Unexpected API response format:", data);
-        Alert.alert(
-          "Warning",
-          "API returned unexpected format. Check console for details."
-        );
-      }
+      const all = await apiClient.getAllPois();
+      setPois(all);
     } catch (error: any) {
       console.error("Error fetching POIs:", error);
       Alert.alert("Error", `Failed to load POIs: ${error.message}`);
@@ -160,7 +108,7 @@ export function POISimulationMap({ apiUrl }: Props) {
       proximityEngine.markTriggered(poi.id);
       console.log("🎯 Triggering POI:", poi.name);
       console.log("🔊 Speaking:", poi.fact?.substring(0, 100) || "No fact");
-      narrationService.speak(poi.fact);
+      void narrator.speak(poi);
     } else {
       console.log("No POIs within trigger radius");
     }
