@@ -1,3 +1,4 @@
+import { DrivingControls } from "@/components/DrivingControls";
 import { LocationSimulatorControls } from "@/components/LocationSimulatorControls";
 import { RoutePlanningModal } from "@/components/RoutePlanningModal";
 import { useDrivingSession } from "@/hooks/useDrivingSession";
@@ -21,6 +22,8 @@ export default function DrivingScreen() {
     locationService,
     toggleDriving,
     loadedPoiCount,
+    controlState,
+    dispatchCommand,
   } = useDrivingSession();
 
   const clearActiveRoute = useAppStore((s) => s.clearActiveRoute);
@@ -98,6 +101,10 @@ export default function DrivingScreen() {
           <Text style={styles.waitingText}>Waiting for location...</Text>
         )}
       </View>
+
+      {isDriving && (
+        <DrivingControls state={controlState} onCommand={dispatchCommand} />
+      )}
 
       <View style={styles.buttonRow}>
         {!isDriving && (

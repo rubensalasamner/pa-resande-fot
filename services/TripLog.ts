@@ -1,3 +1,4 @@
+import type { DrivingCommand } from "@/services/driving/DrivingCommand";
 import type { NarrationEvent } from "@/services/narration/NarrationQueue";
 import type { Location, PointOfInterest } from "@/types";
 import * as FileSystem from "expo-file-system/legacy";
@@ -10,6 +11,7 @@ export type TripLogEvent =
   | { type: "session_end"; at: string }
   | { type: "position"; at: string; location: Location }
   | { type: "trigger"; at: string; poiId: string; name: string }
+  | { type: "command"; at: string; command: DrivingCommand }
   | (NarrationEvent & { at: string })
   | { type: "api_error"; at: string; message: string };
 
@@ -63,6 +65,14 @@ export class TripLog {
 
   async logNarration(event: NarrationEvent): Promise<void> {
     await this.append({ ...event, at: new Date().toISOString() });
+  }
+
+  async logCommand(command: DrivingCommand): Promise<void> {
+    await this.append({
+      type: "command",
+      at: new Date().toISOString(),
+      command,
+    });
   }
 
   async logApiError(message: string): Promise<void> {

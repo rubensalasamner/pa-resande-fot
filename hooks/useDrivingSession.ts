@@ -1,10 +1,11 @@
+import type { DrivingCommand } from "@/services/driving/DrivingCommand";
 import { setLocationHandler } from "@/services/driving/locationBridge";
 import { drivingCoordinator } from "@/services/driving/DrivingCoordinator";
 import { LocationService } from "@/services/LocationService";
 import { useAppStore } from "@/store/useAppStore";
 import type { PointOfInterest } from "@/types";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Alert } from "react-native";
 
 const locationService = new LocationService();
@@ -24,6 +25,12 @@ export function useDrivingSession() {
     distance: number;
   } | null>(null);
   const [loadedPoiCount, setLoadedPoiCount] = useState(0);
+
+  const controlState = useSyncExternalStore(
+    (onStoreChange) => drivingCoordinator.subscribe(onStoreChange),
+    () => drivingCoordinator.getControlState(),
+    () => drivingCoordinator.getControlState()
+  );
 
   useEffect(() => {
     setLocationHandler((location) => {
@@ -77,6 +84,10 @@ export function useDrivingSession() {
 
   const toggleDriving = () => setDriving(!isDriving);
 
+  const dispatchCommand = (command: DrivingCommand) => {
+    void drivingCoordinator.dispatch(command);
+  };
+
   return {
     isDriving,
     currentLocation,
@@ -86,5 +97,7 @@ export function useDrivingSession() {
     locationService,
     toggleDriving,
     loadedPoiCount,
+    controlState,
+    dispatchCommand,
   };
 }
