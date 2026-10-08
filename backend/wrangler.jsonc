@@ -9,7 +9,7 @@
     "DEFAULT_POI_RADIUS_M": "500",
     "MAX_POI_DISTANCE_FROM_ROUTE_M": "1500",
     "TRIGGER_MARGIN_M": "300",
-    "SAMPLES_PER_COLLECT_JOB": "5"
+    "SAMPLES_PER_COLLECT_JOB": "3"
   },
   "d1_databases": [
     {
@@ -34,7 +34,12 @@
     // otherwise messages are dropped before giveUp records the failure.
     // max_batch_size 1 keeps each invocation inside the Free plan's 10 ms CPU / 50 subrequest limits.
     "consumers": [
-      { "queue": "route-jobs", "max_batch_size": 1, "max_retries": 5 },
+      {
+        "queue": "route-jobs",
+        "max_batch_size": 1,
+        "max_retries": 6,
+        "max_concurrency": 1
+      },
       { "queue": "tts-jobs", "max_batch_size": 1, "max_retries": 5 }
     ]
   }

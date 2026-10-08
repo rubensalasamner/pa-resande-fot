@@ -1,3 +1,4 @@
+import { RateLimitedError } from "../providers/WikipediaPoiSource";
 import type { RetryPolicy } from "./retryPolicy";
 
 export interface JobHandler<T> {
@@ -44,7 +45,14 @@ export async function dispatchBatch<T>(
       );
 
       if (message.attempts < retry.maxAttempts) {
-        message.retry({ delaySeconds: retry.delaySeconds(message.attempts) });
+        const delaySeconds =
+          error instanceof RateLimitedError
+            ? Math.max(
+                error.retryAfterSeconds,
+                retry.delaySeconds(message.attempts)
+              )
+            : retry.delaySeconds(message.attempts);
+        message.retry({ delaySeconds });
         continue;
       }
 

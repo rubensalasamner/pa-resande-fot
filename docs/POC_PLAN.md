@@ -34,7 +34,7 @@ Exceeding a Free limit makes that request fail. Cloudflare does not upgrade auto
 - [x] Corridor filter + per-POI trigger radius.
 - [x] Route status terminates on ready/failed; join on script_hash.
 - [x] Deployed: https://pa-resande-fot-api.rubensalasamner.workers.dev
-- [ ] Measure: prepare a 300 km route and use `wrangler tail` plus dashboard CPU metrics.
+- [x] Measured Stockholm→Mora (~323 km): after wiki throttling, 37/37 collect jobs OK, 33/33 audio ready in ~2 min. Earlier failure mode was Wikimedia 429, not Workers CPU.
 
 ## Phase 2: app correctness while driving
 

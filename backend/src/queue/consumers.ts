@@ -20,7 +20,8 @@ import {
 } from "./messages";
 import { exponentialBackoff } from "./retryPolicy";
 
-export const ROUTE_JOBS_RETRY = exponentialBackoff(4, 10);
+/** Longer base delay so Wikimedia 429s can cool down between collect jobs. */
+export const ROUTE_JOBS_RETRY = exponentialBackoff(5, 30, 180);
 export const TTS_RETRY = exponentialBackoff(4, 15);
 
 function routeJobsConsumer(env: Env): QueueConsumer<RouteJobMessage> {

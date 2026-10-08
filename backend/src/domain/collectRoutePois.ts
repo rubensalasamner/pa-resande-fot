@@ -100,15 +100,23 @@ async function finalizeIfComplete(
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function collectRoutePois(
   deps: CollectDeps,
   job: CollectJobMessage
 ): Promise<void> {
-  const found = await Promise.all(
-    job.samples.map((sample) =>
-      deps.poiSource.findNear(sample, job.searchRadiusM)
-    )
-  );
+  // Sequential Wikipedia calls — parallel samples + parallel queue consumers
+  // previously tripped Wikimedia 429s on long Free-tier routes.
+  const found: Awaited<ReturnType<PoiSource["findNear"]>>[] = [];
+  for (let i = 0; i < job.samples.length; i++) {
+    if (i > 0) await sleep(250);
+    found.push(
+      await deps.poiSource.findNear(job.samples[i], job.searchRadiusM)
+    );
+  }
   const pois = toCorridorPois(
     found.flat(),
     job.path,
