@@ -54,15 +54,19 @@ export function RoutePlanningModal({
       });
 
       setProgress(
-        `Rutt skapad (${data.articlesSaved} platser). Genererar ljud...`
+        `Rutt skapad (${Math.round(data.distanceM / 1000)} km). Söker platser...`
       );
 
       const active = await routePackStore.waitAndDownload(
         data.routeId,
         (p) => {
-          if (p.phase === "waiting-audio") {
+          if (p.phase === "collecting") {
             setProgress(
-              `Genererar ljud ${p.audioReady}/${p.audioTotal || "?"}`
+              `Söker platser ${p.collectJobsDone}/${p.collectJobsTotal || "?"}`
+            );
+          } else if (p.phase === "waiting-audio") {
+            setProgress(
+              `Genererar ljud ${p.audioReady + p.audioFailed}/${p.audioTotal || "?"}`
             );
           } else if (p.phase === "downloading") {
             setProgress(`Laddar ner ljud ${p.downloaded}/${p.audioTotal}`);
@@ -74,7 +78,7 @@ export function RoutePlanningModal({
 
       Alert.alert(
         "Klart!",
-        `Rutt förberedd!\n\n${data.message}\n\nArtiklar hämtade: ${data.articlesFetched}\nArtiklar sparade: ${data.articlesSaved}\nLjudfiler: ${active.pois.filter((p) => p.localAudioPath).length}`,
+        `Rutt förberedd!\n\n${data.message}\n\nPlatser: ${active.pois.length}\nLjudfiler: ${active.pois.filter((p) => p.localAudioPath).length}`,
         [
           {
             text: "OK",
@@ -136,7 +140,7 @@ export function RoutePlanningModal({
           <View style={styles.inputContainer}>
             <Text style={styles.label}>
               Sampling-intervall (km):{" "}
-              <Text style={styles.hint}>(1-20, prova 10 på Free-tier)</Text>
+              <Text style={styles.hint}>(1-20 km mellan berättade platser)</Text>
             </Text>
             <TextInput
               style={styles.input}

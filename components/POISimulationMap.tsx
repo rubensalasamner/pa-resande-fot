@@ -1,6 +1,7 @@
 import { apiClient } from "@/services/ApiClient";
 import { narrator } from "@/services/narration";
 import { ProximityEngine } from "@/services/ProximityEngine";
+import { CooldownPolicy } from "@/services/trigger/TriggerPolicy";
 import { Location as LocationType, PointOfInterest } from "@/types";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -27,7 +28,7 @@ const DEFAULT_CAR_POSITION = {
   longitude: 18.0686,
 };
 
-const proximityEngine = new ProximityEngine();
+const proximityEngine = new ProximityEngine(new CooldownPolicy(60_000));
 
 export function POISimulationMap() {
   const [pois, setPois] = useState<PointOfInterest[]>([]);

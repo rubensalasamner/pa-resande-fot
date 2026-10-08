@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { useAppStore } from '@/store/useAppStore';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -45,6 +46,10 @@ export default function RootLayout() {
       shouldPlayInBackground: true,
       interruptionMode: 'duckOthers',
     });
+  }, []);
+
+  useEffect(() => {
+    void useAppStore.getState().hydrateActiveRoute();
   }, []);
 
   if (!loaded) {

@@ -1,33 +1,14 @@
-import { apiClient } from "@/services/ApiClient";
-import { ContentProvider } from "@/services/ContentProvider";
+import { setLocationHandler } from "@/services/driving/locationBridge";
+import { drivingCoordinator } from "@/services/driving/DrivingCoordinator";
 import { LocationService } from "@/services/LocationService";
-import { narrator } from "@/services/narration";
-import { ProximityEngine } from "@/services/ProximityEngine";
 import { useAppStore } from "@/store/useAppStore";
-import type { Location, PointOfInterest } from "@/types";
-import { useEffect, useRef, useState } from "react";
+import type { PointOfInterest } from "@/types";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 
-const REFETCH_DISTANCE_M = 2000;
-
-function haversineMeters(
-  a: { latitude: number; longitude: number },
-  b: { latitude: number; longitude: number }
-): number {
-  const R = 6371e3;
-  const φ1 = (a.latitude * Math.PI) / 180;
-  const φ2 = (b.latitude * Math.PI) / 180;
-  const Δφ = ((b.latitude - a.latitude) * Math.PI) / 180;
-  const Δλ = ((b.longitude - a.longitude) * Math.PI) / 180;
-  const h =
-    Math.sin(Δφ / 2) ** 2 +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
 const locationService = new LocationService();
-const proximityEngine = new ProximityEngine();
-const contentProvider = new ContentProvider();
+const KEEP_AWAKE_TAG = "driving-session";
 
 export function useDrivingSession() {
   const {
@@ -36,24 +17,22 @@ export function useDrivingSession() {
     nearbyPOIs,
     activeRoute,
     setDriving,
-    setCurrentLocation,
-    setNearbyPOIs,
   } = useAppStore();
 
-  const poisRef = useRef<PointOfInterest[]>(
-    activeRoute?.pois ?? contentProvider.getAllPOIs()
-  );
-  const lastFetchLocation = useRef<Location | null>(null);
   const [nextPOI, setNextPOI] = useState<{
     poi: PointOfInterest;
     distance: number;
   } | null>(null);
+  const [loadedPoiCount, setLoadedPoiCount] = useState(0);
 
   useEffect(() => {
-    if (activeRoute?.pois?.length) {
-      poisRef.current = activeRoute.pois;
-    }
-  }, [activeRoute]);
+    setLocationHandler((location) => {
+      drivingCoordinator.processLocation(location);
+      setNextPOI(drivingCoordinator.getNextPOI(location));
+      setLoadedPoiCount(drivingCoordinator.loadedPoiCount);
+    });
+    return () => setLocationHandler(null);
+  }, []);
 
   useEffect(() => {
     if (isDriving) {
@@ -66,12 +45,6 @@ export function useDrivingSession() {
     };
   }, [isDriving]);
 
-  useEffect(() => {
-    if (currentLocation && isDriving) {
-      void checkForNearbyPOIs(currentLocation);
-    }
-  }, [currentLocation, isDriving]);
-
   const startDriving = async () => {
     const hasPermission = await locationService.requestPermissions();
     if (!hasPermission) {
@@ -83,61 +56,23 @@ export function useDrivingSession() {
       return;
     }
 
-    await locationService.startLocationTracking((location) => {
-      setCurrentLocation(location);
-    });
+    try {
+      await activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+    } catch {
+      // optional on web
+    }
+
+    await drivingCoordinator.start();
+    await locationService.startLocationTracking();
   };
 
   const stopDriving = async () => {
     await locationService.stopLocationTracking();
-    await narrator.stop();
-    setCurrentLocation(null);
-    setNearbyPOIs([]);
+    await drivingCoordinator.stop();
+    deactivateKeepAwake(KEEP_AWAKE_TAG);
+    useAppStore.getState().setCurrentLocation(null);
     setNextPOI(null);
-  };
-
-  const ensurePois = async (location: Location) => {
-    if (activeRoute?.pois?.length) {
-      poisRef.current = activeRoute.pois;
-      return;
-    }
-
-    const last = lastFetchLocation.current;
-    if (
-      last &&
-      haversineMeters(last, location) < REFETCH_DISTANCE_M &&
-      poisRef.current.length > 0
-    ) {
-      return;
-    }
-
-    try {
-      const pois = await apiClient.getPois(
-        location.latitude,
-        location.longitude,
-        5000
-      );
-      poisRef.current = pois;
-      lastFetchLocation.current = location;
-    } catch (error) {
-      console.error("Failed to fetch POIs", error);
-      poisRef.current = contentProvider.getAllPOIs();
-    }
-  };
-
-  const checkForNearbyPOIs = async (location: Location) => {
-    await ensurePois(location);
-    const pois = poisRef.current;
-
-    const triggerable = proximityEngine.getTriggerablePOIs(location, pois);
-    setNearbyPOIs(triggerable);
-    setNextPOI(proximityEngine.getNextPOI(location, pois));
-
-    if (triggerable.length > 0) {
-      const poi = triggerable[0];
-      proximityEngine.markTriggered(poi.id);
-      await narrator.speak(poi);
-    }
+    setLoadedPoiCount(0);
   };
 
   const toggleDriving = () => setDriving(!isDriving);
@@ -150,6 +85,6 @@ export function useDrivingSession() {
     activeRoute,
     locationService,
     toggleDriving,
-    loadedPoiCount: poisRef.current.length,
+    loadedPoiCount,
   };
 }

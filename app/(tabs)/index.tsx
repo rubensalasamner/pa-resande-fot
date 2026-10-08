@@ -1,7 +1,9 @@
 import { LocationSimulatorControls } from "@/components/LocationSimulatorControls";
 import { RoutePlanningModal } from "@/components/RoutePlanningModal";
 import { useDrivingSession } from "@/hooks/useDrivingSession";
+import { emitLocation } from "@/services/driving/locationBridge";
 import { LocationSimulator } from "@/services/LocationSimulator";
+import { tripLog } from "@/services/TripLog";
 import { useAppStore } from "@/store/useAppStore";
 import type { Location as LocationType } from "@/types";
 import React, { useState } from "react";
@@ -21,7 +23,7 @@ export default function DrivingScreen() {
     loadedPoiCount,
   } = useDrivingSession();
 
-  const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
+  const clearActiveRoute = useAppStore((s) => s.clearActiveRoute);
   const [showRoutePlanning, setShowRoutePlanning] = useState(false);
 
   return (
@@ -116,6 +118,45 @@ export default function DrivingScreen() {
         </TouchableOpacity>
       </View>
 
+      {!isDriving && (
+        <View style={styles.secondaryRow}>
+          {activeRoute ? (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                Alert.alert(
+                  "Rensa rutt",
+                  "Ta bort den sparade rutten och ljudfilerna från telefonen?",
+                  [
+                    { text: "Avbryt", style: "cancel" },
+                    {
+                      text: "Rensa",
+                      style: "destructive",
+                      onPress: () => void clearActiveRoute(),
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.secondaryButtonText}>Rensa rutt</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => {
+              void tripLog.shareLatest().catch((error) =>
+                Alert.alert(
+                  "Tripplogg",
+                  error instanceof Error ? error.message : "Kunde inte dela"
+                )
+              );
+            }}
+          >
+            <Text style={styles.secondaryButtonText}>Dela tripplogg</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <RoutePlanningModal
         visible={showRoutePlanning}
         onClose={() => setShowRoutePlanning(false)}
@@ -135,7 +176,7 @@ export default function DrivingScreen() {
               accuracy: 10,
               timestamp: Date.now(),
             };
-            setCurrentLocation(location);
+            emitLocation(location);
           }}
         />
       )}
@@ -272,7 +313,26 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: "row",
     gap: 12,
+    marginBottom: 12,
+  },
+  secondaryRow: {
+    flexDirection: "row",
+    gap: 12,
     marginBottom: 20,
+  },
+  secondaryButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: "#333",
+    fontSize: 14,
+    fontWeight: "600",
   },
   prepareButton: {
     backgroundColor: "#007AFF",

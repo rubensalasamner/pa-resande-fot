@@ -1,8 +1,19 @@
 # pa-resande-fot API (Cloudflare Workers)
 
-Workers + D1 + R2 (+ Queues on Paid) backend for route prep, Wikipedia POIs, and Google Chirp TTS.
+Workers + D1 + R2 + Queues backend for route prep, Wikipedia POIs, and Google Chirp TTS.
 
 Current default voice: `sv-SE-Chirp3-HD-Algenib` (`TTS_VOICE` in `wrangler.jsonc`).
+
+## Architecture
+
+Route preparation is split so every Worker invocation stays inside the Free plan limits (50 external subrequests, 50 D1 queries, 10 ms CPU):
+
+1. `POST /api/prepare-route` geocodes + routes (3 external calls), decimates the polyline, enqueues collect jobs on `route-jobs`, returns immediately.
+2. Each `collect` job searches Wikipedia for a few corridor samples, filters POIs by distance to the road, and writes with `db.batch` + `json_each`.
+3. When all collect jobs finish, a `finalize` job picks one POI per `intervalKm` window (closest to the road), creates pending narrations, and enqueues `tts-jobs`.
+4. Each TTS job synthesizes one Chirp MP3 into R2. Failures retry with exponential backoff; the last attempt marks the narration `failed`.
+
+Queue consumers share one `dispatchBatch` helper (`JobHandler` + `RetryPolicy`). Adding a new job kind is a new handler entry, not a new `if` in `index.ts`.
 
 ## Prerequisites (one-time cloud setup)
 
@@ -10,90 +21,67 @@ Current default voice: `sv-SE-Chirp3-HD-Algenib` (`TTS_VOICE` in `wrangler.jsonc
 
 1. Create a free account at [openrouteservice.org](https://openrouteservice.org/) / HeiGIT.
 2. Create an API key (Standard free plan is enough for local testing).
-3. You will put this in `.dev.vars` as `ORS_API_KEY`.
+3. Put it in `.dev.vars` as `ORS_API_KEY`.
 
 ### 2. Google Cloud Text-to-Speech
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), pick or create a project (billing must be enabled for TTS usage; Chirp 3 HD has a free monthly character allotment).
-2. Enable **Cloud Text-to-Speech API**  
-   (`texttospeech.googleapis.com`) — not Speech-to-Text.  
-   Direct link: [API library](https://console.cloud.google.com/apis/library/texttospeech.googleapis.com)
-3. **IAM & Admin → Service Accounts → Create service account**  
-   Example name: `pa-resande-fot-tts`.
-4. Permissions step: you can leave roles empty. The console often **does not show** a “Cloud Text-to-Speech User” role; for the standard synthesize API, **API enabled + JSON key is enough**.
-5. Open the service account → **Keys → Add key → Create new key → JSON** → download.
+1. In [Google Cloud Console](https://console.cloud.google.com/), pick or create a project (billing must be enabled for TTS; Chirp 3 HD has a free monthly character allotment).
+2. Enable **Cloud Text-to-Speech API** (`texttospeech.googleapis.com`) — not Speech-to-Text.
+3. **IAM & Admin → Service Accounts → Create service account** (e.g. `pa-resande-fot-tts`).
+4. Permissions: leave roles empty. API enabled + JSON key is enough.
+5. **Keys → Add key → Create new key → JSON** → download.
 6. Put the JSON contents (one line) into `.dev.vars` as `GCP_SERVICE_ACCOUNT_JSON`.
 
-Optional if you later get `403` and want an explicit role (Cloud Shell):
+### 3. Local development
 
 ```bash
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:YOUR_SA@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/texttospeech.user"
-```
-
-### 3. Cloudflare (local first, deploy later)
-
-**Local (no paid plan required):**
-
-1. Install deps: `cd backend && npm install`
-2. Copy env template and fill secrets (never commit `.dev.vars`):
-
-```bash
+cd backend
+npm install
 cp .dev.vars.example .dev.vars
 # edit .dev.vars: ORS_API_KEY + GCP_SERVICE_ACCOUNT_JSON
-```
 
-3. Apply D1 migrations locally and start:
-
-```bash
 npm run db:migrate:local
 npm run dev
 ```
 
-API: `http://localhost:8787` — check `GET /health` → `{"ok":true}`.
+API: `http://localhost:8787` — `GET /health` → `{"ok":true}`.
 
-Bindings used locally via Miniflare: D1 (`DB`), R2 (`AUDIO`), Queue (`TTS_QUEUE`). Queues work under `wrangler dev` even on Free.
+Queues work under `wrangler dev` on Free. Both `route-jobs` and `tts-jobs` are simulated locally.
 
-**Deploy to Cloudflare (when ready):**
+### 4. Deploy to Cloudflare
 
-1. `npx wrangler login`
-2. Create resources (Free can create D1 + R2; Queues need Workers Paid ~$5/mo):
+Queues are available on Workers Free (10k operations/day since 2026-02).
 
 ```bash
+npx wrangler login
 npx wrangler d1 create pa-resande-fot
 npx wrangler r2 bucket create pa-resande-fot-audio
-# Paid only:
+npx wrangler queues create route-jobs
 npx wrangler queues create tts-jobs
 ```
 
-3. Paste real `database_id` / bucket name into `wrangler.jsonc`.
-4. Upload secrets (do not put them in git):
+Paste the real `database_id` into `wrangler.jsonc`, then:
 
 ```bash
 npx wrangler secret put ORS_API_KEY
 npx wrangler secret put GCP_SERVICE_ACCOUNT_JSON
-```
-
-5. Migrate + deploy:
-
-```bash
 npx wrangler d1 migrations apply pa-resande-fot --remote
 npm run deploy
 ```
 
-6. Point the Expo app at the Worker URL via `EXPO_PUBLIC_API_URL` in a root `.env` (see repo `.env.example`).
+Point the Expo app at the Worker URL via `EXPO_PUBLIC_API_URL` (see repo `.env.example`).
 
-## Free-tier notes (Workers)
+## Free-tier knobs (`wrangler.jsonc` vars)
 
-- Prefer short routes / higher `intervalKm` (e.g. 10–15) on Workers Free (50 subrequests per invocation).
-- Without Queues in production, TTS can run **inline** for up to `INLINE_TTS_MAX` POIs (default 5). Locally, the queue consumer usually handles TTS.
-- Chirp characters: first ~1M Chirp 3 HD characters/month are free on Google; audio is cached in R2 by `(poi, voice, script_hash)`.
+| Var | Default | Meaning |
+|-----|---------|---------|
+| `MAX_POI_DISTANCE_FROM_ROUTE_M` | `1500` | Corridor half-width; POIs farther away are dropped |
+| `TRIGGER_MARGIN_M` | `300` | Extra meters added to distance-to-route for the trigger radius |
+| `SAMPLES_PER_COLLECT_JOB` | `5` | Wikipedia calls per collect job (must stay ≤ Free external-subrequest budget) |
+| `DEFAULT_POI_RADIUS_M` | `500` | Floor for per-POI trigger radius |
+| `TTS_VOICE` | Algenib | Chirp 3 HD voice id |
 
-## Changing voice
-
-Edit `TTS_VOICE` in `wrangler.jsonc` (e.g. `sv-SE-Chirp3-HD-Algenib`), restart `npm run dev`.  
-To A/B male voices locally: `node scripts/sample-male-voices.mjs` → writes `voice-samples/` (gitignored).
+`intervalKm` in the prepare request controls how densely narrated POIs are selected along the route (one closest-to-road POI per window), not the Wikipedia search density.
 
 ## Useful endpoints
 
@@ -102,8 +90,8 @@ To A/B male voices locally: `node scripts/sample-male-voices.mjs` → writes `vo
 | GET | `/health` | Liveness |
 | GET | `/api/all-pois` | List POIs |
 | GET | `/api/pois?lat=&lon=&radius=` | Nearby POIs |
-| POST | `/api/prepare-route` | `{ origin, destination, intervalKm }` |
-| GET | `/api/routes/:id` | Route status + `audioUrl`s |
+| POST | `/api/prepare-route` | `{ origin, destination, intervalKm }` → `{ routeId, distanceM, collectJobs }` |
+| GET | `/api/routes/:id` | Status: `collecting` → `generating` → `ready` / `failed` |
 | GET | `/audio/...` | Cached MP3 from R2 |
 
 ## Tests
@@ -111,3 +99,5 @@ To A/B male voices locally: `node scripts/sample-male-voices.mjs` → writes `vo
 ```bash
 npm test
 ```
+
+Pipeline tests use `getPlatformProxy` against a real local D1.

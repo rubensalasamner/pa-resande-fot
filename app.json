@@ -8,6 +8,7 @@
     "scheme": "paresandefot",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "owner": "rubensalasamner",
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -21,6 +22,7 @@
       }
     },
     "android": {
+      "package": "com.rubensalasamner.paresandefot",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -30,7 +32,11 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -43,6 +49,8 @@
       [
         "expo-location",
         {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
           "locationAlwaysAndWhenInUsePermission": "Allow pa-resande-fot to use your location in the background to provide audio guides while driving."
         }
       ],
@@ -56,6 +64,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d599cb5d-602d-4463-931f-54218517e116"
+      }
     }
   }
 }

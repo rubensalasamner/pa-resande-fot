@@ -13,26 +13,38 @@ export interface PoiDto {
 export interface PrepareRouteRequest {
   origin: string;
   destination: string;
+  /** Minimum spacing in km between narrated POIs along the route. */
   intervalKm: number;
 }
 
 export interface PrepareRouteResponse {
   routeId: string;
   message: string;
-  articlesFetched: number;
-  articlesSaved: number;
-  audioPending: number;
+  distanceM: number;
+  collectJobs: number;
 }
+
+export type RoutePhase = "collecting" | "generating" | "ready" | "failed";
 
 export interface RouteStatusResponse {
   routeId: string;
   origin: string;
   destination: string;
   intervalKm: number;
+  status: RoutePhase;
+  error?: string;
+  collectJobsTotal: number;
+  collectJobsDone: number;
+  collectJobsFailed: number;
   pois: PoiDto[];
   audioReady: number;
+  audioFailed: number;
   audioTotal: number;
-  ready: boolean;
+  failedNarrations?: Array<{
+    poiId: string;
+    name: string;
+    error: string;
+  }>;
 }
 
 export interface PoisListResponse {

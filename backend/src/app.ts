@@ -4,10 +4,11 @@ import type {
   PoisListResponse,
   PrepareRouteRequest,
   PrepareRouteResponse,
-  RouteStatusResponse,
 } from "../../shared/apiTypes";
-import { createPrepareDeps } from "./createDeps";
-import { prepareRoute } from "./domain/prepareRoute";
+import { readRouteConfig } from "./config";
+import { createPlanDeps } from "./createDeps";
+import { planRoute } from "./domain/planRoute";
+import { getRouteStatus } from "./domain/routeStatus";
 import type { Env } from "./env";
 import { queryPoisNear, toPoiDto, type PoiRow } from "./poiMapper";
 import { R2AudioStore } from "./providers/R2AudioStore";
@@ -15,8 +16,7 @@ import { R2AudioStore } from "./providers/R2AudioStore";
 type AppEnv = { Bindings: Env };
 
 function requestOrigin(c: { req: { url: string } }): string {
-  const url = new URL(c.req.url);
-  return url.origin;
+  return new URL(c.req.url).origin;
 }
 
 export function createApp() {
@@ -35,7 +35,7 @@ export function createApp() {
       return c.json({ error: "lat and lon are required" }, 400);
     }
 
-    const voiceId = c.env.TTS_VOICE || "sv-SE-Chirp3-HD-Algenib";
+    const { voiceId } = readRouteConfig(c.env);
     const rows = await queryPoisNear(c.env.DB, lat, lon, radius, voiceId);
     const origin = requestOrigin(c);
     const pois = rows.map((row) => toPoiDto(row, origin));
@@ -45,7 +45,7 @@ export function createApp() {
   });
 
   app.get("/api/all-pois", async (c) => {
-    const voiceId = c.env.TTS_VOICE || "sv-SE-Chirp3-HD-Algenib";
+    const { voiceId } = readRouteConfig(c.env);
     const result = await c.env.DB.prepare(
       `SELECT p.*, n.r2_key, n.status AS narration_status
        FROM pois p
@@ -78,16 +78,8 @@ export function createApp() {
       return c.json({ error: "intervalKm must be between 1 and 20" }, 400);
     }
 
-    if (!c.env.ORS_API_KEY) {
-      return c.json(
-        { error: "ORS_API_KEY is not configured on the worker" },
-        500
-      );
-    }
-
     try {
-      const deps = createPrepareDeps(c.env);
-      const result = await prepareRoute(deps, {
+      const result = await planRoute(createPlanDeps(c.env), {
         origin: body.origin.trim(),
         destination: body.destination.trim(),
         intervalKm,
@@ -95,10 +87,9 @@ export function createApp() {
 
       const response: PrepareRouteResponse = {
         routeId: result.routeId,
-        message: `Hittade ${result.articlesSaved} platser längs rutten.`,
-        articlesFetched: result.articlesFetched,
-        articlesSaved: result.articlesSaved,
-        audioPending: result.audioPending,
+        message: `Rutt på ${Math.round(result.distanceM / 1000)} km skapad. Söker platser längs vägen.`,
+        distanceM: result.distanceM,
+        collectJobs: result.jobCount,
       };
       return c.json(response);
     } catch (error) {
@@ -109,55 +100,16 @@ export function createApp() {
   });
 
   app.get("/api/routes/:id", async (c) => {
-    const routeId = c.req.param("id");
-    const voiceId = c.env.TTS_VOICE || "sv-SE-Chirp3-HD-Algenib";
-
-    const route = await c.env.DB.prepare(
-      `SELECT id, origin, destination, interval_km FROM routes WHERE id = ?`
-    )
-      .bind(routeId)
-      .first<{
-        id: string;
-        origin: string;
-        destination: string;
-        interval_km: number;
-      }>();
-
-    if (!route) {
+    const status = await getRouteStatus(
+      c.env.DB,
+      c.req.param("id"),
+      readRouteConfig(c.env).voiceId,
+      requestOrigin(c)
+    );
+    if (!status) {
       return c.json({ error: "Route not found" }, 404);
     }
-
-    const result = await c.env.DB.prepare(
-      `SELECT p.*, n.r2_key, n.status AS narration_status, rp.order_index
-       FROM route_pois rp
-       JOIN pois p ON p.id = rp.poi_id
-       LEFT JOIN narrations n
-         ON n.poi_id = p.id AND n.voice_id = ?
-       WHERE rp.route_id = ?
-       ORDER BY rp.order_index ASC`
-    )
-      .bind(voiceId, routeId)
-      .all<PoiRow & { order_index: number }>();
-
-    const rows = result.results ?? [];
-    const origin = requestOrigin(c);
-    const pois = rows.map((row) => toPoiDto(row, origin));
-
-    const withNarration = rows.filter((r) => r.narration_status);
-    const audioReady = rows.filter((r) => r.narration_status === "ready").length;
-    const audioTotal = withNarration.length || pois.length;
-
-    const body: RouteStatusResponse = {
-      routeId: route.id,
-      origin: route.origin,
-      destination: route.destination,
-      intervalKm: route.interval_km,
-      pois,
-      audioReady,
-      audioTotal,
-      ready: audioTotal === 0 || audioReady >= audioTotal,
-    };
-    return c.json(body);
+    return c.json(status);
   });
 
   app.get("/audio/*", async (c) => {

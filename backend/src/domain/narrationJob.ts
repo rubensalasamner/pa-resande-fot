@@ -1,4 +1,4 @@
-import type { TtsJobMessage } from "../env";
+import type { TtsJobMessage } from "../queue/messages";
 import type { AudioStore, TtsProvider } from "../providers/types";
 
 export interface NarrationJobDeps {
@@ -7,10 +7,15 @@ export interface NarrationJobDeps {
   audioStore: AudioStore;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Throws on failure so the queue can retry; the narration stays `pending`. */
 export async function processNarrationJob(
   deps: NarrationJobDeps,
   job: TtsJobMessage
-): Promise<"skipped" | "ready" | "failed"> {
+): Promise<"skipped" | "ready"> {
   const existing = await deps.db
     .prepare(
       `SELECT status, r2_key FROM narrations
@@ -23,37 +28,56 @@ export async function processNarrationJob(
     return "skipped";
   }
 
-  const r2Key = deps.audioStore.keyFor(
-    job.voiceId,
-    job.poiId,
-    job.scriptHash
-  );
-  const ts = new Date().toISOString();
+  const r2Key = deps.audioStore.keyFor(job.voiceId, job.poiId, job.scriptHash);
 
   try {
     const audio = await deps.tts.synthesize(job.script, job.voiceId);
     await deps.audioStore.put(r2Key, audio);
-
-    await deps.db
-      .prepare(
-        `UPDATE narrations
-         SET status = 'ready', r2_key = ?, error = NULL, updated_at = ?
-         WHERE poi_id = ? AND voice_id = ? AND script_hash = ?`
-      )
-      .bind(r2Key, ts, job.poiId, job.voiceId, job.scriptHash)
-      .run();
-
-    return "ready";
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     await deps.db
       .prepare(
-        `UPDATE narrations
-         SET status = 'failed', error = ?, updated_at = ?
+        `UPDATE narrations SET error = ?, updated_at = ?
          WHERE poi_id = ? AND voice_id = ? AND script_hash = ?`
       )
-      .bind(message, ts, job.poiId, job.voiceId, job.scriptHash)
+      .bind(
+        errorMessage(error),
+        new Date().toISOString(),
+        job.poiId,
+        job.voiceId,
+        job.scriptHash
+      )
       .run();
-    return "failed";
+    throw error;
   }
+
+  await deps.db
+    .prepare(
+      `UPDATE narrations
+       SET status = 'ready', r2_key = ?, error = NULL, updated_at = ?
+       WHERE poi_id = ? AND voice_id = ? AND script_hash = ?`
+    )
+    .bind(r2Key, new Date().toISOString(), job.poiId, job.voiceId, job.scriptHash)
+    .run();
+
+  return "ready";
+}
+
+export async function markNarrationFailed(
+  db: D1Database,
+  job: TtsJobMessage,
+  error: unknown
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE narrations SET status = 'failed', error = ?, updated_at = ?
+       WHERE poi_id = ? AND voice_id = ? AND script_hash = ? AND status != 'ready'`
+    )
+    .bind(
+      errorMessage(error),
+      new Date().toISOString(),
+      job.poiId,
+      job.voiceId,
+      job.scriptHash
+    )
+    .run();
 }

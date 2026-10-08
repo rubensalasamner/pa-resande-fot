@@ -1,17 +1,15 @@
+import type { RouteJobMessage, TtsJobMessage } from "./queue/messages";
+
 export interface Env {
   DB: D1Database;
   AUDIO: R2Bucket;
-  TTS_QUEUE: Queue;
+  ROUTE_QUEUE: Queue<RouteJobMessage>;
+  TTS_QUEUE: Queue<TtsJobMessage>;
   TTS_VOICE: string;
   DEFAULT_POI_RADIUS_M: string;
-  INLINE_TTS_MAX: string;
+  MAX_POI_DISTANCE_FROM_ROUTE_M: string;
+  TRIGGER_MARGIN_M: string;
+  SAMPLES_PER_COLLECT_JOB: string;
   ORS_API_KEY: string;
   GCP_SERVICE_ACCOUNT_JSON: string;
-}
-
-export interface TtsJobMessage {
-  poiId: string;
-  voiceId: string;
-  scriptHash: string;
-  script: string;
 }

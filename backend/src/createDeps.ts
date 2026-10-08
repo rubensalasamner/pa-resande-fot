@@ -1,28 +1,48 @@
+import { readRouteConfig } from "./config";
+import type { CollectDeps } from "./domain/collectRoutePois";
+import type { FinalizeDeps } from "./domain/finalizeRoute";
+import type { NarrationJobDeps } from "./domain/narrationJob";
+import type { PlanRouteDeps } from "./domain/planRoute";
 import type { Env } from "./env";
-import type { PrepareRouteDeps } from "./domain/prepareRoute";
 import { ExtractScriptWriter } from "./providers/ExtractScriptWriter";
 import { GoogleChirpTtsProvider } from "./providers/GoogleChirpTtsProvider";
 import { OpenRouteServiceProvider } from "./providers/OpenRouteServiceProvider";
 import { R2AudioStore } from "./providers/R2AudioStore";
 import { WikipediaPoiSource } from "./providers/WikipediaPoiSource";
 
-export function createPrepareDeps(env: Env): PrepareRouteDeps {
-  const audioStore = new R2AudioStore(env.AUDIO);
-  const hasGcp = Boolean(env.GCP_SERVICE_ACCOUNT_JSON?.trim());
-  const hasQueue = typeof env.TTS_QUEUE?.send === "function";
-
+export function createPlanDeps(env: Env): PlanRouteDeps {
+  if (!env.ORS_API_KEY?.trim()) {
+    throw new Error("ORS_API_KEY is not configured on the worker");
+  }
   return {
     db: env.DB,
     routeProvider: new OpenRouteServiceProvider(env.ORS_API_KEY),
+    routeQueue: env.ROUTE_QUEUE,
+    config: readRouteConfig(env),
+  };
+}
+
+export function createCollectDeps(env: Env): CollectDeps {
+  return {
+    db: env.DB,
     poiSource: new WikipediaPoiSource("sv"),
     scriptWriter: new ExtractScriptWriter(),
-    audioStore,
-    tts: hasGcp
-      ? new GoogleChirpTtsProvider(env.GCP_SERVICE_ACCOUNT_JSON)
-      : undefined,
-    queue: hasQueue ? env.TTS_QUEUE : undefined,
-    voiceId: env.TTS_VOICE || "sv-SE-Chirp3-HD-Algenib",
-    defaultRadiusM: Number(env.DEFAULT_POI_RADIUS_M || 500),
-    inlineTtsMax: Number(env.INLINE_TTS_MAX || 5),
+    routeQueue: env.ROUTE_QUEUE,
+    config: readRouteConfig(env),
+  };
+}
+
+export function createFinalizeDeps(env: Env): FinalizeDeps {
+  return { db: env.DB, ttsQueue: env.TTS_QUEUE };
+}
+
+export function createNarrationDeps(env: Env): NarrationJobDeps {
+  if (!env.GCP_SERVICE_ACCOUNT_JSON?.trim()) {
+    throw new Error("GCP_SERVICE_ACCOUNT_JSON is not configured on the worker");
+  }
+  return {
+    db: env.DB,
+    tts: new GoogleChirpTtsProvider(env.GCP_SERVICE_ACCOUNT_JSON),
+    audioStore: new R2AudioStore(env.AUDIO),
   };
 }
